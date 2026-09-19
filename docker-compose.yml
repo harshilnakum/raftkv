@@ -1,0 +1,22 @@
+# 3-node cluster on one machine:  docker compose up --build
+# then, from the host:  raftkv_ctl --addrs 127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003 info
+services:
+  node1: &node
+    build: .
+    command: raftkv_server --id 1 --peers 1=node1:7001,2=node2:7002,3=node3:7003 --data /data --shards 4
+    ports: ["7001:7001"]
+    volumes: ["node1-data:/data"]
+  node2:
+    <<: *node
+    command: raftkv_server --id 2 --peers 1=node1:7001,2=node2:7002,3=node3:7003 --data /data --shards 4
+    ports: ["7002:7002"]
+    volumes: ["node2-data:/data"]
+  node3:
+    <<: *node
+    command: raftkv_server --id 3 --peers 1=node1:7001,2=node2:7002,3=node3:7003 --data /data --shards 4
+    ports: ["7003:7003"]
+    volumes: ["node3-data:/data"]
+volumes:
+  node1-data:
+  node2-data:
+  node3-data:

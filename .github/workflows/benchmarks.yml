@@ -1,0 +1,35 @@
+name: Benchmarks
+# Manual: Actions tab -> Benchmarks -> Run workflow. Runs on GitHub's shared 4-vCPU Linux runner with all three nodes
+# and the load generator on the same machine, so treat numbers as a floor for a laptop-class box, not for a dedicated cluster.
+on:
+  workflow_dispatch:
+    inputs:
+      campaign_seeds:
+        description: "Simulator seeds to run in the campaign step"
+        default: "50000"
+
+jobs:
+  bench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libgrpc++-dev libprotobuf-dev protobuf-compiler protobuf-compiler-grpc pkg-config
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRAFTKV_BUILD_TESTS=OFF && cmake --build build -j
+      - run: mkdir -p out && lscpu | tee out/lscpu.txt && df -h /tmp | tee out/disk.txt
+      - name: Throughput and latency (write / linearizable read / mixed)
+        run: THREADS="16 64" DUR=15 scripts/bench_all.sh | tee out/bench.txt
+      - name: Failover (leader kill -9 under load), 7 runs
+        run: RUNS=7 scripts/failover_bench.sh | tee out/failover.txt
+      - name: Simulation campaign
+        run: ./build/raftkv_sim --seeds 1..${{ github.event.inputs.campaign_seeds }} | tee out/campaign.txt
+      - name: Summary
+        if: always()
+        run: |
+          { echo '## raftkv benchmarks'; head -3 out/lscpu.txt | sed 's/^/    /'
+            for f in out/bench.txt out/failover.txt out/campaign.txt; do echo "### $f"; echo '```'; cat "$f"; echo '```'; done; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: out/

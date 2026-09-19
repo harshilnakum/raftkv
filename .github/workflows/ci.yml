@@ -1,0 +1,53 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gRPC
+        run: sudo apt-get update && sudo apt-get install -y libgrpc++-dev libprotobuf-dev protobuf-compiler protobuf-compiler-grpc pkg-config
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.compiler }} -DRAFTKV_WERROR=ON
+      - run: cmake --build build -j
+      - run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DRAFTKV_BUILD_GRPC=OFF -DRAFTKV_SANITIZE="address;undefined"
+      - run: cmake --build build -j
+      - run: ./build/raftkv_tests
+
+  simulation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRAFTKV_BUILD_GRPC=OFF -DRAFTKV_BUILD_TESTS=OFF && cmake --build build -j --target raftkv_sim
+      - name: 5,000 fault-injected 3-node runs, 1,000 five-node runs (must all be linearizable)
+        run: |
+          ./build/raftkv_sim --seeds 1..5000
+          ./build/raftkv_sim --nodes 5 --seeds 1..1000
+      - name: "The tester must be able to fail: injected protocol bugs must be detected"
+        run: |
+          for bug in small-quorum vote-ignores-log forget-vote read-before-term-commit; do
+            if ./build/raftkv_sim --bug $bug --seeds 1..1500 --stop-on-failure > out.txt; then echo "NOT DETECTED: $bug"; cat out.txt; exit 1; fi
+            echo "detected $bug: $(grep -m1 FAIL out.txt | cut -c1-120)"
+          done
+
+  integration:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y libgrpc++-dev libprotobuf-dev protobuf-compiler protobuf-compiler-grpc pkg-config
+      - run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRAFTKV_BUILD_TESTS=OFF && cmake --build build -j
+      - name: Real 3-process cluster, kill -9 the leader under load
+        run: scripts/integration_test.sh

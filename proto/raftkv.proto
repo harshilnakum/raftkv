@@ -1,0 +1,72 @@
+syntax = "proto3";
+package raftkv.pb;
+
+// ---- node-to-node Raft transport ----------------------------------------------------------------------------
+message Entry {
+  uint64 term = 1;
+  uint64 index = 2;
+  uint32 type = 3;
+  bytes data = 4;
+}
+message SnapshotMsg {
+  uint64 index = 1;
+  uint64 term = 2;
+  bytes data = 3;
+}
+message RaftEnvelope {
+  uint32 shard = 1;
+  uint32 type = 2;
+  uint32 from = 3;
+  uint32 to = 4;
+  uint64 term = 5;
+  uint64 log_index = 6;
+  uint64 log_term = 7;
+  repeated Entry entries = 8;
+  uint64 commit = 9;
+  bool reject = 10;
+  uint64 match_index = 11;
+  uint64 hint_index = 12;
+  uint64 hint_term = 13;
+  uint64 read_seq = 14;
+  SnapshotMsg snapshot = 15;
+}
+message Ack {}
+service RaftTransport {
+  // One long-lived client stream per (sender, receiver) pair; messages may be lost, Raft tolerates that.
+  rpc Stream(stream RaftEnvelope) returns (Ack);
+}
+
+// ---- client API ---------------------------------------------------------------------------------------------
+enum OpKind { GET = 0; PUT = 1; APPEND = 2; CAS = 3; }
+enum RpcStatus { OK = 0; NOT_LEADER = 1; RETRY = 2; TIMEOUT = 3; }
+message KvRequest {
+  uint64 client = 1;  // unique client (session) id
+  uint64 seq = 2;     // per-client request number; retries re-send the SAME number (exactly-once)
+  OpKind op = 3;
+  string key = 4;
+  bytes value = 5;
+  bytes expected = 6;
+}
+message KvResponse {
+  RpcStatus status = 1;
+  bool ok = 2;        // CAS: swapped?
+  bytes value = 3;
+  uint32 leader_hint = 4;
+}
+message InfoRequest {}
+message ShardInfo {
+  uint32 shard = 1;
+  uint32 role = 2;    // 0 follower, 1 candidate, 2 leader
+  uint64 term = 3;
+  uint32 leader = 4;
+  uint64 commit = 5;
+  uint64 applied = 6;
+}
+message InfoResponse {
+  uint32 node = 1;
+  repeated ShardInfo shards = 2;
+}
+service Kv {
+  rpc Execute(KvRequest) returns (KvResponse);
+  rpc Info(InfoRequest) returns (InfoResponse);
+}
