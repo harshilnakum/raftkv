@@ -3,3 +3,4 @@ gen/
 data/
 *.o
 .cache/
+.DS_Store

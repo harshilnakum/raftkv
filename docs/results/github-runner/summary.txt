@@ -1,0 +1,19 @@
+GitHub-hosted runner (ubuntu-24.04), AMD EPYC 7763-class x86_64, 4 vCPU shared VM. All three server processes and the load
+generator run on the same machine. 4 shards, 128-byte values, 10,000 keys, closed-loop gRPC clients.
+
+== bench.txt ==
+write, 16 threads : 3911 ops/s (58666 ok, 0 failed)   latency ms p50 3.97 p90 5.13 p99 8.46 p99.9 14.88 max 30.12
+write, 64 threads : 7161 ops/s (107415 ok, 0 failed)  latency ms p50 8.72 p90 11.22 p99 14.77 p99.9 35.20 max 59.31
+read, 16 threads  : 7780 ops/s (116695 ok, 0 failed)  latency ms p50 2.02 p90 2.69 p99 3.38 p99.9 4.09 max 6.13
+read, 64 threads  : 11681 ops/s (175213 ok, 0 failed) latency ms p50 5.32 p90 7.59 p99 9.96 p99.9 11.89 max 16.68
+mixed, 16 threads : 4747 ops/s (71205 ok, 0 failed)   latency ms p50 3.25 p90 4.41 p99 6.25 p99.9 17.30 max 56.55
+mixed, 64 threads : 7715 ops/s (115726 ok, 0 failed)  latency ms p50 8.05 p90 10.82 p99 14.74 p99.9 31.07 max 52.59
+
+== failover.txt (kill -9 the node leading the most shards under a write load; longest interval with no successful op) ==
+run 1: 365 ms   run 2: 333 ms   run 3: 308 ms   run 4: 336 ms   run 5: 532 ms   run 6: 330 ms   run 7: 430 ms
+sorted: 308 330 333 336 365 430 532   median 336 ms, max 532 ms; 0 failed client operations in all 7 runs
+
+== campaign.txt (raftkv_sim --seeds 1..50000, same seeds as the local campaign) ==
+50000 runs in 395.0s: 0 failed, 0 inconclusive
+28,323,934 completed operations (+30,285 unknown outcome), 196,813 crashes (23,618 power loss during fsync), 110,401 partitions,
+10,601 torn-WAL repairs, 615,101,736 events, max term 45

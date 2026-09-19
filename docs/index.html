@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>raftkv: fault-tolerant replicated key-value store with a deterministic simulator</title>
+<style>
+  :root { --bg:#ffffff; --fg:#1a1a1a; --mute:#5b6270; --card:#f4f6f8; --line:#dde2e8; --acc:#1f5fbf; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1216; --fg:#e8eaed; --mute:#9aa3af; --card:#171b21; --line:#2a313b; --acc:#6ea8fe; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 820px; margin: 0 auto; padding: 48px 20px 80px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; }
+  h2 { margin-top: 40px; font-size: 1.2rem; }
+  .sub { color: var(--mute); margin: 0 0 20px; }
+  a { color: var(--acc); }
+  .links a { display:inline-block; margin:0 10px 10px 0; padding:8px 14px; border:1px solid var(--line); border-radius:8px; text-decoration:none; }
+  table { width:100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align: top; }
+  th { color: var(--mute); font-weight:600; font-size:.85rem; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  code, pre { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:.9em; }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:12px; overflow-x:auto; }
+  .table-wrap { overflow-x:auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>raftkv</h1>
+  <p class="sub">A linearizable, hash-partitioned key-value store on Raft in C++20, with a deterministic simulator that runs whole clusters from a seed and checks every history for linearizability.</p>
+  <p class="links">
+    <a href="https://github.com/harshilnakum/raftkv">Source code on GitHub</a>
+    <a href="https://github.com/harshilnakum/raftkv/actions">CI runs</a>
+    <a href="https://github.com/harshilnakum/raftkv/blob/main/docs/DESIGN.md">Design notes</a>
+    <a href="https://github.com/harshilnakum/raftkv/blob/main/docs/TESTING.md">What was tested, found, and not found</a>
+  </p>
+
+  <h2>What it does</h2>
+  <ul>
+    <li>Raft: leader election, pipelined log replication, snapshots, ReadIndex linearizable reads, CheckQuorum.</li>
+    <li>CRC-checked write-ahead log with torn-tail repair and crash-safe snapshots.</li>
+    <li>put / append / compare-and-swap with exactly-once client sessions; keys hash-partitioned across shards of 3 replicas.</li>
+    <li>gRPC between nodes and clients; group commit (one fsync per batch of requests).</li>
+  </ul>
+
+  <h2>How it is verified</h2>
+  <div class="card">
+    A deterministic simulator runs whole clusters (virtual clock; lost, duplicated and reordered messages; partitions; power loss that tears writes, including mid-fsync; clock skew; leader kills) and an independent checker verifies every history is linearizable. Any failure replays exactly from its seed. The tester is itself tested: it catches 5 of 6 deliberately injected protocol bugs (the sixth is documented as not found).
+  </div>
+
+  <h2>Measured</h2>
+  <p class="sub">Simulation on the final code; real 3-process cluster on a GitHub-hosted 4-vCPU Linux runner (servers and load generator share the machine).</p>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Metric</th><th>Result</th></tr>
+    <tr><td>Simulator campaign</td><td>100,000 seeded runs, 0 failures; 56.7M operations checked; 393K crashes (47.5K power losses mid-fsync); 221K partitions</td></tr>
+    <tr><td>Real bugs found and fixed</td><td>3 (retransmission stall, stuck-flag livelock, WAL recovery gap); none were safety violations</td></tr>
+    <tr><td>Writes (64 client threads)</td><td>7.2K ops/s, p50 8.7 ms, p99 14.8 ms</td></tr>
+    <tr><td>Linearizable reads (64 client threads)</td><td>11.7K ops/s, p50 5.3 ms, p99 10.0 ms</td></tr>
+    <tr><td>Failover after <code>kill -9</code> of the leader under load</td><td>median 336 ms, max 532 ms over 7 runs; 0 failed client operations</td></tr>
+  </table>
+  </div>
+  <p class="sub">Limits: static membership, no PreVote, single-key operations, no comparison against other systems.</p>
+
+  <h2>Try it</h2>
+<pre>git clone https://github.com/harshilnakum/raftkv
+cd raftkv
+cmake -S . -B build &amp;&amp; cmake --build build -j
+./build/raftkv_sim --seeds 1..1000
+scripts/integration_test.sh</pre>
+</main>
+</body>
+</html>
