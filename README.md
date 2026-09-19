@@ -69,17 +69,20 @@ docker compose up --build                    # same cluster in containers
 
 ## Measured (real processes over loopback gRPC)
 
-Development VM, **1 vCPU shared by all three servers and the load generator** (a floor, not a headline):
+GitHub-hosted 4-vCPU Linux runner, **all three servers and the load generator on the same shared machine**, 4 shards,
+128-byte values. Raw output: [docs/results/github-runner](docs/results/github-runner/summary.txt).
 
-| | |
-|---|---|
-| Writes (32 client threads) | 2.9K ops/s, p50 10 ms, p99 23 ms |
-| Linearizable reads (32 threads) | 5.4K ops/s, p50 5 ms, p99 15 ms |
-| Failover: `kill -9` the leader under load, 6 runs | longest no-success interval median 434 ms, max 503 ms; 0 failed client ops |
+| | 16 client threads | 64 client threads |
+|---|---|---|
+| Writes (majority-replicated, fsynced) | 3.9K ops/s, p50 4.0 ms, p99 8.5 ms | **7.2K ops/s**, p50 8.7 ms, p99 14.8 ms |
+| Linearizable reads (ReadIndex) | 7.8K ops/s, p50 2.0 ms, p99 3.4 ms | **11.7K ops/s**, p50 5.3 ms, p99 10.0 ms |
+| Mixed 50/50 | 4.7K ops/s | 7.7K ops/s |
 
-No comparison with other systems was made. Run the *Benchmarks* workflow for 4-vCPU numbers.
+Failover: `kill -9` of the node leading the most shards under a write load, 7 runs: longest interval without a successful
+operation **median 336 ms, max 532 ms** (election timeout is 300 to 600 ms); 0 failed client operations in every run.
 
-See [docs/BENCHMARKS.md](docs/BENCHMARKS.md) for method, machine and caveats.
+No comparison with other systems was made, and a dedicated 3-machine cluster would behave differently (network and fsync
+latency instead of CPU contention). See [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## Design decisions and limits
 

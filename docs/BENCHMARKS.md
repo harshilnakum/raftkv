@@ -22,9 +22,20 @@ Failover (6 independent runs, election timeout 300 to 600 ms): longest no-succes
 503 ms; **median 434 ms, max 503 ms**; 0 failed client operations in every run (retries with the same client/seq).
 Three earlier single runs gave 306 and 479 ms.
 
-## Results, GitHub-hosted runner (4 vCPU)
+## Results, GitHub-hosted runner (4 vCPU shared VM); raw text in `docs/results/github-runner/summary.txt`
 
-Not yet measured. Run *Actions, Benchmarks, Run workflow* and paste `out/bench.txt` and `out/failover.txt` here.
+| Workload | 16 threads | 64 threads |
+|---|---|---|
+| Writes | 3,911 ops/s (p50 3.97 ms, p99 8.46 ms) | 7,161 ops/s (p50 8.72 ms, p99 14.77 ms) |
+| Linearizable reads | 7,780 ops/s (p50 2.02 ms, p99 3.38 ms) | 11,681 ops/s (p50 5.32 ms, p99 9.96 ms) |
+| Mixed 50/50 | 4,747 ops/s (p50 3.25 ms, p99 6.25 ms) | 7,715 ops/s (p50 8.05 ms, p99 14.74 ms) |
+
+Failover, 7 runs (kill -9 of the busiest leader under load): 308, 330, 333, 336, 365, 430, 532 ms; **median 336 ms, max
+532 ms**; 0 failed client operations in all runs. Throughput while the failover runs were in progress was about 3.0K writes/s
+(8 client threads).
+
+The same workflow re-ran `raftkv_sim --seeds 1..50000`: 50,000 runs, 0 failures (28.3M operations, 196,813 crashes).
+These are the same seeds as the local campaign, so the two runs confirm each other rather than adding coverage.
 
 ## Caveats
 
